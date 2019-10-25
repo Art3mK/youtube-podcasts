@@ -2,8 +2,12 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
   poor's man youtube podcasts
-
 Resources:
+  YoutubeVideosQueue:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      VisibilityTimeout: 300
+
   AudioUploader:
     Type: AWS::Serverless::Function
     Properties:
@@ -17,6 +21,12 @@ Resources:
       Environment:
         Variables:
           S3_OUTPUT_BUCKET: "podcasts.awsome.click"
+      Events:
+        MySQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt YoutubeVideosQueue.Arn
+            BatchSize: 1
       Policies:
           - AWSLambdaExecute # Managed Policy
           - Version: '2012-10-17' # Policy Document
@@ -27,7 +37,7 @@ Resources:
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
                   - sqs:ReceiveMessage
-                Resource: '*'
+                Resource: !GetAtt YoutubeVideosQueue.Arn
               - Effect: Allow
                 Action:
                   - s3:PutObject*
