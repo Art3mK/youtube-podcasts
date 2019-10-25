@@ -53,7 +53,7 @@ def lambda_handler(event, context):
     #             "messageAttributes": {},
     #             "md5OfBody": "3221d21455b5e20b9a2cb77f12ab5169",
     #             "eventSource": "aws:sqs",
-    #             "eventSourceARN": "arn:aws:sqs:eu-north-1: 616707832308:youtube-podcasts",
+    #             "eventSourceARN": "arn:aws:sqs:eu-north-1:1234567890:youtube-podcasts",
     #             "awsRegion": "eu-north-1"
     #         }
     #     ]
