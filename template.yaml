@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  poor's man youtube podcasts
+
+Resources:
+  AudioUploader:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: audio_uploader/
+      Handler: audio_uploader.lambda_handler
+      Runtime: python3.7
+      MemorySize: 256
+      Timeout: 300
+      Layers:
+        - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:ffmpeg:1"
+      Environment:
+        Variables:
+          S3_OUTPUT_BUCKET: "podcasts.awsome.click"
+      Policies:
+          - AWSLambdaExecute # Managed Policy
+          - Version: '2012-10-17' # Policy Document
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ChangeMessageVisibility
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ReceiveMessage
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject*
+                Resource: 'arn:aws:s3:::podcasts.awsome.click/*'
