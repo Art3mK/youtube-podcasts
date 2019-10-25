@@ -8,6 +8,72 @@ Resources:
     Properties:
       VisibilityTimeout: 300
 
+  SourcesQueue:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      VisibilityTimeout: 300
+
+  Init:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: init/
+      Handler: init.lambda_handler
+      Runtime: python3.7
+      MemorySize: 128
+      Timeout: 300
+      Environment:
+        Variables:
+          S3_BUCKET: "podcasts.awsome.click"
+          SQS_QUEUE_URL: !Ref SourcesQueue
+      Policies:
+        - AWSLambdaExecute # Managed Policy
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:ChangeMessageVisibility
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+                - sqs:ReceiveMessage
+                - sqs:SendMessage
+              Resource: !GetAtt SourcesQueue.Arn
+
+  Parser:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: youtube_parser/
+      Handler: fetch_videos.lambda_handler
+      Runtime: python3.7
+      MemorySize: 128
+      Timeout: 300
+      Environment:
+        Variables:
+          SQS_QUEUE_URL: !Ref YoutubeVideosQueue
+          YOUTUBE_API_KEY: "redacted"
+      Events:
+        MySQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SourcesQueue.Arn
+            BatchSize: 1
+      Policies:
+        - AWSLambdaExecute # Managed Policy
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:ChangeMessageVisibility
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+                - sqs:ReceiveMessage
+                - sqs:SendMessage
+              Resource: !GetAtt YoutubeVideosQueue.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource: '*'
+
   AudioUploader:
     Type: AWS::Serverless::Function
     Properties:
