@@ -19,6 +19,8 @@ def upload_to_s3(folder, bucket):
         s3 = boto3.client('s3')
         print(f"Uploading {folder}/{file_name} to s3://{bucket}")
         s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL':'public-read', 'ContentType': "audio/m4a"})
+        # lambdas are reused, so clean up /tmp
+        os.remove(file)
 
 if __name__ == "__main__":
     download_audio_file('https://www.youtube.com/watch?v=1wYLsMmwZkM')

@@ -86,10 +86,7 @@ def fetch_playlist_videos(playlist_id, youtube_client):
             entries += data['items']
         request = youtube_client.playlistItems().list_next(request, data)
 
-    counter = 0
     for item in entries:
-        if counter >= 10 : break
-        counter += 1
         # push each video id to SQS
         snippet = item['snippet']
         if snippet['resourceId']['kind'] == 'youtube#video':
