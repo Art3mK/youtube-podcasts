@@ -6,7 +6,8 @@ import json
 
 ydl_opts = {
     'format': 'bestaudio[ext=m4a]',
-    'outtmpl': '/tmp/%(title)s.%(ext)s'
+    'outtmpl': '%(title)s.%(ext)s',
+    'writeinfojson': True
 }
 
 def download_audio_file(url):
@@ -24,7 +25,7 @@ def upload_to_s3(folder, bucket):
 
 if __name__ == "__main__":
     download_audio_file('https://www.youtube.com/watch?v=1wYLsMmwZkM')
-    upload_to_s3('buff_dudes','podcasts.awsome.click')
+    # upload_to_s3('buff_dudes','podcasts.awsome.click')
 
 def lambda_handler(event, context):
     S3_BUCKET = os.environ.get('S3_OUTPUT_BUCKET')

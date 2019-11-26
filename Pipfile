@@ -7,11 +7,13 @@ verify_ssl = true
 autopep8 = "*"
 
 [packages]
-youtube-dl = "*"
 boto3 = "*"
 e = "*"
 google-api-python-client = "*"
 pip = "==19.2.3"
+google-auth = "*"
+oauth2client = "*"
+youtube_dl = "*"
 
 [requires]
 python_version = "3.7"
