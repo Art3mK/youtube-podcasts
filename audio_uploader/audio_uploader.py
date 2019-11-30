@@ -15,17 +15,26 @@ def download_audio_file(url):
         ydl.download([url])
 
 def upload_to_s3(folder, bucket):
-    for file in glob.glob("/tmp/*.m4a"):
+    s3 = boto3.client('s3',endpoint_url='http://localhost:4572',aws_access_key_id="abc",aws_secret_access_key="bce")
+    # s3 = boto3.client('s3')
+    for file in glob.glob("/tmp/local/*.m4a"):
         file_name = os.path.basename(file)
-        s3 = boto3.client('s3')
         print(f"Uploading {folder}/{file_name} to s3://{bucket}")
         s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL':'public-read', 'ContentType': "audio/m4a"})
         # lambdas are reused, so clean up /tmp
         os.remove(file)
+    for file in glob.glob("/tmp/local/*.info.json"):
+        file_name = os.path.basename(file)
+        print(f"Uploading {folder}/{file_name} to s3://{bucket}")
+        s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL':'public-read', 'ContentType': "text/json"})
+        # lambdas are reused, so clean up /tmp
+        os.remove(file)
 
 if __name__ == "__main__":
-    download_audio_file('https://www.youtube.com/watch?v=1wYLsMmwZkM')
-    # upload_to_s3('buff_dudes','podcasts.awsome.click')
+    # download_audio_file('https://www.youtube.com/watch?v=1wYLsMmwZkM')
+    # download_audio_file('https://www.youtube.com/watch?v=dqwpQarrDwk')
+    # download_audio_file('https://www.youtube.com/watch?v=udFxKZRyQt4')
+    upload_to_s3('buff_dudes','podcasts.awsome.click')
 
 def lambda_handler(event, context):
     S3_BUCKET = os.environ.get('S3_OUTPUT_BUCKET')
@@ -37,6 +46,8 @@ def lambda_handler(event, context):
         print(data)
         download_audio_file(data['videoId'])
         upload_to_s3(data['channel_title'], S3_BUCKET)
+
+
     # {
     #     "Records": [
     #         {
