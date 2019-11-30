@@ -108,3 +108,30 @@ Resources:
                 Action:
                   - s3:PutObject*
                 Resource: 'arn:aws:s3:::podcasts.awsome.click/*'
+
+  PodcastsGenerator:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: podcast_feedgen/
+      Handler: podcast_feedgen.lambda_handler
+      Runtime: python3.7
+      MemorySize: 256
+      Timeout: 600
+      Environment:
+        Variables:
+          S3_OUTPUT_BUCKET: "podcasts.awsome.click"
+      Events:
+        cron:
+          Type: Schedule # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Name: podcast_feedgen
+            Schedule: cron(0 6,12 * * ? *)
+            Enabled: true
+      Policies:
+          - AWSLambdaExecute # Managed Policy
+          - Version: '2012-10-17' # Policy Document
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject*
+                Resource: 'arn:aws:s3:::podcasts.awsome.click/*'
