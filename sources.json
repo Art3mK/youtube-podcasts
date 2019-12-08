@@ -2,7 +2,9 @@
     "channels": [
         {"id":"UCY649zJeJVhhJa-rvWThZ2g", "comment": "доктор утин"},
         {"id":"UCoiyr9RVNBRYy2PQS2BHhKQ", "comment": "Савельев"},
-        {"id":"UCH8OTOBqGHGgEg94lHD3wOA", "comment": "Цацицулин"}
+        {"id":"UCH8OTOBqGHGgEg94lHD3wOA", "comment": "Цацицулин"},
+        {"id":"UCFJnZHIusOlHr-pbYVHmr-A", "comment": "Хартман"},
+        {"id":"UCL1rJ0ROIw9V1qFeIN0ZTZQ", "comment": "Шульман"}
     ],
     "playlists": [
         {"id": "PLEWOWCFKsUgagVW0-WPUZFdzIruyHNgMv"}
