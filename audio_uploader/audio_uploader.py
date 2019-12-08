@@ -6,7 +6,9 @@ import json
 
 ydl_opts = {
     'format': 'bestaudio[ext=m4a]',
-    'outtmpl': '/tmp/%(title)s.%(ext)s'
+    'outtmpl': '/tmp/%(title)s.%(ext)s',
+    'writeinfojson': True,
+    'cachedir': False
 }
 
 def download_audio_file(url):
@@ -14,16 +16,53 @@ def download_audio_file(url):
         ydl.download([url])
 
 def upload_to_s3(folder, bucket):
+    # s3 = boto3.client('s3',endpoint_url='http://localhost:4572',aws_access_key_id="abc",aws_secret_access_key="bce")
+    s3 = boto3.client('s3')
     for file in glob.glob("/tmp/*.m4a"):
         file_name = os.path.basename(file)
-        s3 = boto3.client('s3')
         print(f"Uploading {folder}/{file_name} to s3://{bucket}")
         s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL':'public-read', 'ContentType': "audio/m4a"})
         # lambdas are reused, so clean up /tmp
         os.remove(file)
+    for file in glob.glob("/tmp/*.info.json"):
+        file_name = os.path.basename(file)
+        print(f"Uploading {folder}/{file_name} to s3://{bucket}")
+        s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL':'public-read', 'ContentType': "text/json"})
+        # lambdas are reused, so clean up /tmp
+        os.remove(file)
+    decrement_ddb_counter()
+
+def decrement_ddb_counter():
+    print(f"Decrementing DDB counter")
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table('videos_counter')
+    response = table.update_item(
+        Key={ 'id': 'audio_uploader' },
+        UpdateExpression="set queue = queue - :val",
+        ExpressionAttributeValues={
+            ':val': 1
+        },
+        ReturnValues="UPDATED_NEW"
+    )
+
+    if response['Attributes']['queue'] == 0:
+        notify_podcast_generator()
+
+def notify_podcast_generator():
+    SNS_TOPIC = os.environ.get('FEEDGEN_SNS_TOPIC')
+    if SNS_TOPIC is None:
+        print("Warning, FEEDGEN_SNS_TOPIC is not set, will not notify feedgen lambda")
+        return 0
+    sns = boto3.client('sns')
+    resonse = sns.publish(
+        TopicArn=SNS_TOPIC,
+        Message='Whatever',
+    )
 
 if __name__ == "__main__":
     download_audio_file('https://www.youtube.com/watch?v=1wYLsMmwZkM')
+    # download_audio_file('https://www.youtube.com/watch?v=dqwpQarrDwk')
+    # download_audio_file('https://www.youtube.com/watch?v=udFxKZRyQt4')
     upload_to_s3('buff_dudes','podcasts.awsome.click')
 
 def lambda_handler(event, context):
@@ -36,6 +75,8 @@ def lambda_handler(event, context):
         print(data)
         download_audio_file(data['videoId'])
         upload_to_s3(data['channel_title'], S3_BUCKET)
+
+
     # {
     #     "Records": [
     #         {
