@@ -12,10 +12,12 @@ def generate_feed(bucket, prefix, events, s3_client):
     fg = FeedGenerator()
     fg.load_extension('podcast')
     fg.podcast.itunes_category('Podcasting')
-    fg.id(f'https://podcasts.awsome.click/{prefix}')
+    fg.podcast.itunes_image(f'http://podcasts.awsome.click/{prefix}thumbnail.jpg')
+    fg.id(f'http://podcasts.awsome.click/{prefix}')
     fg.title(f'Artem Kajalainen\'s feed for youtube\'s {prefix}')
     fg.author( {'name':'Artem Kajalainen','email':'artem@kayalaynen.ru'} )
     fg.link(href=f'http://podcasts.awsome.click/{prefix}/atom.xml', rel='self' )
+    fg.description('youtube videos as podcast')
     fg.language('ru')
     for event in events:
         entry = fg.add_entry()
@@ -24,8 +26,10 @@ def generate_feed(bucket, prefix, events, s3_client):
         entry.summary(event["description"])
         entry.link(href=event["media"])
         entry.enclosure(event["media"], 0, "audio/m4a")
-    fg.atom_file('atom.xml')
-    s3_client.upload_file('atom.xml', bucket, f'{prefix}atom.xml', ExtraArgs={'ACL':'public-read', 'ContentType': "text/xml"})
+        entry.podcast.itunes_image(event['thumbnail'])
+    fg.rss_file('/tmp/feed.rss')
+    s3_client.upload_file('/tmp/feed.rss', bucket, f'{prefix}feed.rss', ExtraArgs={'ACL':'public-read', 'ContentType': "text/xml"})
+    os.remove('/tmp/feed.rss')
 
 def list_episodes(bucket, prefix, s3_client):
     episodes = []
@@ -40,7 +44,8 @@ def list_episodes(bucket, prefix, s3_client):
         event['title'] = episode['title']
         event['description'] = episode['description']
         event['id'] = episode['id']
-        event['media'] = f"http://{bucket}/{prefix}{episode['_filename']}"
+        event['media'] = f"http://{bucket}/{prefix}{os.path.basename(episode['_filename'])}"
+        event['thumbnail'] = episode['thumbnail']
         episodes.append(event)
     generate_feed(bucket, prefix, episodes, s3_client)
 
