@@ -26,6 +26,13 @@ Resources:
       Runtime: python3.7
       MemorySize: 128
       Timeout: 300
+      Events:
+        cron:
+          Type: Schedule # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Name: podcasts-init
+            Schedule: cron(0 4,12 * * ? *)
+            Enabled: true
       Environment:
         Variables:
           S3_BUCKET: "podcasts.awsome.click"
