@@ -6,6 +6,5 @@ stack_name = "podcasts"
 s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-1ucfm6gwz2pmz"
 s3_prefix = "podcasts"
 region = "eu-north-1"
-confirm_changeset = true
+confirm_changeset = false
 capabilities = "CAPABILITY_IAM"
-
