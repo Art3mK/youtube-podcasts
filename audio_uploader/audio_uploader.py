@@ -21,7 +21,7 @@ def upload_to_s3(folder, bucket):
     for file in glob.glob("/tmp/*.m4a"):
         file_name = os.path.basename(file)
         print(f"Uploading {folder}/{file_name} to s3://{bucket}")
-        s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL':'public-read', 'ContentType': "audio/m4a"})
+        s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL':'public-read', 'ContentType': "audio/m4a", 'StorageClass': 'ONEZONE_IA' })
         # lambdas are reused, so clean up /tmp
         os.remove(file)
     for file in glob.glob("/tmp/*.info.json"):
