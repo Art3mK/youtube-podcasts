@@ -45,6 +45,8 @@ def decrement_ddb_counter():
         ReturnValues="UPDATED_NEW"
     )
 
+    print(f"Counter returned: {response['Attirbutes']['queue']}")
+
     if response['Attributes']['queue'] == 0:
         notify_podcast_generator()
 
