@@ -1,0 +1,266 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: youtube-podcasts
+
+provider:
+  name: aws
+  runtime: python3.8
+  region: eu-north-1
+package:
+  individually: true
+custom:
+  youtube-api-key: ${ssm:/youtube-podcasts/youtube-api-key}
+  youtube-podcasts-s3-bucket: podcasts.awsome.click
+  pythonRequirements:
+    dockerizePip: true
+#    zip: true
+#    slim: true
+functions:
+  init:
+    handler: init.lambda_handler
+    module: init
+    memorySize: 128
+    timeout: 300
+    events:
+      - schedule: cron(0 4,12 * * ? *)
+    role: YoutubePodcastsLambdaInit
+    environment:
+      S3_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
+      SQS_QUEUE_URL: !Ref SourcesQueue
+  parser:
+    handler: fetch_videos.lambda_handler
+    module: youtube_parser
+    memorySize: 128
+    timeout: 300
+    events:
+      - sqs:
+          arn: !GetAtt SourcesQueue.Arn
+          batchSize: 1
+    role: YoutubePodcastsLambdaParser
+    environment:
+      SQS_QUEUE_URL: !Ref YoutubeVideosQueue
+      YOUTUBE_API_KEY: ${self:custom.youtube-api-key}
+      S3_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
+  uploader:
+    handler: audio_uploader.lambda_handler
+    module: audio_uploader
+    memorySize: 256
+    timeout: 300
+    events:
+      - sqs:
+          arn: !GetAtt YoutubeVideosQueue.Arn
+          batchSize: 1
+    layers:
+      - 'Fn::Join':
+          - ':'
+          - - 'arn:aws:lambda'
+            - Ref: 'AWS::Region'
+            - Ref: 'AWS::AccountId'
+            - 'layer:ffmpeg:1'
+#      - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:ffmpeg:1"
+    role: YoutubePodcastsLambdaUploader
+    environment:
+      FEEDGEN_SNS_TOPIC: !Ref FeedgenNotificationTopic
+      S3_OUTPUT_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
+  generator:
+    handler: podcast_feedgen.lambda_handler
+    module: podcast_feedgen
+    memorySize: 256
+    timeout: 600
+    events:
+      - sns:
+          arn: !Ref FeedgenNotificationTopic
+          topicName: w00t
+    role: YoutubePodcastsLambdaGenerator
+    environment:
+      S3_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
+
+
+resources:
+  Resources:
+    YoutubeVideosQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        VisibilityTimeout: 300
+    SourcesQueue:
+      Type: "AWS::SQS::Queue"
+      Properties:
+        VisibilityTimeout: 300
+    FeedgenNotificationTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        DisplayName: "Feedgen notifications topic"
+    YoutubePodcastsLambdaParser:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: parser-lambda
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - sqs:ChangeMessageVisibility
+                    - sqs:DeleteMessage
+                    - sqs:GetQueueAttributes
+                    - sqs:ReceiveMessage
+                    - sqs:SendMessage
+                  Resource: !GetAtt YoutubeVideosQueue.Arn
+                - Effect: Allow
+                  Action:
+                    - sqs:ChangeMessageVisibility
+                    - sqs:DeleteMessage
+                    - sqs:GetQueueAttributes
+                    - sqs:ReceiveMessage
+                  Resource: !GetAtt SourcesQueue.Arn
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                  Resource: '*'
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject*
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}/*'
+    YoutubePodcastsLambdaInit:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: init-lambda
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - sqs:ChangeMessageVisibility
+                    - sqs:DeleteMessage
+                    - sqs:GetQueueAttributes
+                    - sqs:ReceiveMessage
+                    - sqs:SendMessage
+                  Resource: !GetAtt SourcesQueue.Arn
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject*
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}/*'
+                - Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}'
+    YoutubePodcastsLambdaUploader:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: uploader-lambda
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - sqs:ChangeMessageVisibility
+                    - sqs:DeleteMessage
+                    - sqs:GetQueueAttributes
+                    - sqs:ReceiveMessage
+                  Resource: !GetAtt YoutubeVideosQueue.Arn
+                - Effect: Allow
+                  Action:
+                    - dynamodb:UpdateItem
+                  Resource: '*'
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject*
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}/*'
+                - Effect: Allow
+                  Action:
+                    - sns:List*
+                    - sns:Publish
+                  Resource: '*'
+    YoutubePodcastsLambdaGenerator:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: uploader-lambda
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject*
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}/*'
+                - Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}'
+
+
+
+stepFunctions:
+  stateMachines:
+    youtube_podcasts:
+      name: youtube-podcasts
+      definition:
+        StartAt: init
+        States:
+          init:
+            Type: Task
+            Resource: !GetAtt init.Arn
+            Next: parser
+          parser:
+            Type: Task
+            Resource: !GetAtt parser.Arn
+            End: true
+
+plugins:
+  - serverless-python-requirements
+  - serverless-step-functions
