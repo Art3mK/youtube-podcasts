@@ -224,6 +224,6 @@ def lambda_handler(event, context):
 if __name__ == "__main__":
     api_service_name = "youtube"
     api_version = "v3"
-    youtube = googleapiclient.discovery.build(api_service_name, api_version, developerKey='AIzaSyCJU9hYhlq408db0PBNuzQzfCn_ipqXiSI', cache_discovery=False)
+    youtube = googleapiclient.discovery.build(api_service_name, api_version, developerKey='', cache_discovery=False)
     # fetch_channel_videos('UCKf0UqBiCQI4Ol0To9V0pKQ', youtube, None)
     fetch_playlist_videos('PLEWOWCFKsUgagVW0-WPUZFdzIruyHNgMv', youtube)
