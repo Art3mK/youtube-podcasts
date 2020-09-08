@@ -14,6 +14,11 @@ import googleapiclient.errors
 SQS_QUEUE_URL = None
 S3_BUCKET = None
 
+try:
+  import unzip_requirements
+except ImportError:
+  pass
+
 def upload_channel_thumbnail(channel_title, thumbnail_url):
     global S3_BUCKET
     s3 = boto3.client('s3')
@@ -204,15 +209,21 @@ def lambda_handler(event, context):
     api_version = "v3"
     youtube = googleapiclient.discovery.build(api_service_name, api_version, developerKey=YT_API_KEY, cache_discovery=False)
 
-    for record in event['Records']:
-        data = json.loads(record['body'])
-        if data['type'] == 'channel':
-            # get 3 months old videos only
-            three_months_ago = (datetime.utcnow() - timedelta(days=90)).isoformat("T") + "Z"
-            # fetch_channel_videos(data['id'], youtube, three_months_ago)
-            fetch_channel_videos(data['id'], youtube)
-        elif data['type'] == 'playlist':
-            fetch_playlist_videos(data['id'], youtube)
-        else:
-            print("Does not compute")
-            print(record)
+    # {'type': 'playlist', 'id': 'PLEWOWCFKsUgagVW0-WPUZFdzIruyHNgMv'}
+    if event['type'] == 'channel':
+        # get 3 months old videos only
+        three_months_ago = (datetime.utcnow() - timedelta(days=90)).isoformat("T") + "Z"
+        # fetch_channel_videos(data['id'], youtube, three_months_ago)
+        fetch_channel_videos(event['id'], youtube)
+    elif event['type'] == 'playlist':
+        fetch_playlist_videos(event['id'], youtube)
+    else:
+        print("Does not compute")
+        print(event)
+
+if __name__ == "__main__":
+    api_service_name = "youtube"
+    api_version = "v3"
+    youtube = googleapiclient.discovery.build(api_service_name, api_version, developerKey='AIzaSyCJU9hYhlq408db0PBNuzQzfCn_ipqXiSI', cache_discovery=False)
+    # fetch_channel_videos('UCKf0UqBiCQI4Ol0To9V0pKQ', youtube, None)
+    fetch_playlist_videos('PLEWOWCFKsUgagVW0-WPUZFdzIruyHNgMv', youtube)

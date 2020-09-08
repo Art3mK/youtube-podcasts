@@ -19,13 +19,26 @@ provider:
   region: eu-north-1
 package:
   individually: true
+  exclude:
+    - node_modules/**
+    - model/**
+    - .vscode/**
 custom:
   youtube-api-key: ${ssm:/youtube-podcasts/youtube-api-key}
   youtube-podcasts-s3-bucket: podcasts.awsome.click
   pythonRequirements:
-    dockerizePip: true
-#    zip: true
-#    slim: true
+    dockerizePip: non-linux
+    usePipenv: false # c'mon, don't enable this again.
+    zip: !
+    noDeploy:
+      - boto3
+      - botocore
+      - docutils
+      - jmespath
+      - pip
+      - python-dateutil
+      - s3transfer
+      - setuptools
 functions:
   init:
     handler: init.lambda_handler
@@ -243,8 +256,6 @@ resources:
                     - s3:ListBucket
                   Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}'
 
-
-
 stepFunctions:
   stateMachines:
     youtube_podcasts:
@@ -257,8 +268,14 @@ stepFunctions:
             Resource: !GetAtt init.Arn
             Next: parser
           parser:
-            Type: Task
-            Resource: !GetAtt parser.Arn
+            Type: Map
+            Iterator:
+              StartAt: mappped_parser
+              States:
+                mappped_parser:
+                  Type: Task
+                  Resource: !GetAtt parser.Arn
+                  End: true
             End: true
 
 plugins:
