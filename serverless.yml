@@ -29,7 +29,7 @@ custom:
   pythonRequirements:
     dockerizePip: non-linux
     usePipenv: false # c'mon, don't enable this again.
-    zip: !
+    # don't use slim, it will break things
     noDeploy:
       - boto3
       - botocore
@@ -45,24 +45,16 @@ functions:
     module: init
     memorySize: 128
     timeout: 300
-    events:
-      - schedule: cron(0 4,12 * * ? *)
     role: YoutubePodcastsLambdaInit
     environment:
       S3_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
-      SQS_QUEUE_URL: !Ref SourcesQueue
   parser:
     handler: fetch_videos.lambda_handler
     module: youtube_parser
     memorySize: 128
     timeout: 300
-    events:
-      - sqs:
-          arn: !GetAtt SourcesQueue.Arn
-          batchSize: 1
     role: YoutubePodcastsLambdaParser
     environment:
-      SQS_QUEUE_URL: !Ref YoutubeVideosQueue
       YOUTUBE_API_KEY: ${self:custom.youtube-api-key}
       S3_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
   uploader:
@@ -70,10 +62,6 @@ functions:
     module: audio_uploader
     memorySize: 256
     timeout: 300
-    events:
-      - sqs:
-          arn: !GetAtt YoutubeVideosQueue.Arn
-          batchSize: 1
     layers:
       - 'Fn::Join':
           - ':'
@@ -81,39 +69,25 @@ functions:
             - Ref: 'AWS::Region'
             - Ref: 'AWS::AccountId'
             - 'layer:ffmpeg:1'
-#      - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:ffmpeg:1"
     role: YoutubePodcastsLambdaUploader
     environment:
-      FEEDGEN_SNS_TOPIC: !Ref FeedgenNotificationTopic
       S3_OUTPUT_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
   generator:
     handler: podcast_feedgen.lambda_handler
     module: podcast_feedgen
     memorySize: 256
     timeout: 600
-    events:
-      - sns:
-          arn: !Ref FeedgenNotificationTopic
-          topicName: w00t
     role: YoutubePodcastsLambdaGenerator
     environment:
       S3_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
-
+  merger:
+    handler: merge_arrays.lambda_handler
+    module: map_output_merge
+    memorySize: 128
+    timeout: 300
 
 resources:
   Resources:
-    YoutubeVideosQueue:
-      Type: "AWS::SQS::Queue"
-      Properties:
-        VisibilityTimeout: 300
-    SourcesQueue:
-      Type: "AWS::SQS::Queue"
-      Properties:
-        VisibilityTimeout: 300
-    FeedgenNotificationTopic:
-      Type: AWS::SNS::Topic
-      Properties:
-        DisplayName: "Feedgen notifications topic"
     YoutubePodcastsLambdaParser:
       Type: AWS::IAM::Role
       Properties:
@@ -132,21 +106,6 @@ resources:
             PolicyDocument:
               Version: '2012-10-17'
               Statement:
-                - Effect: Allow
-                  Action:
-                    - sqs:ChangeMessageVisibility
-                    - sqs:DeleteMessage
-                    - sqs:GetQueueAttributes
-                    - sqs:ReceiveMessage
-                    - sqs:SendMessage
-                  Resource: !GetAtt YoutubeVideosQueue.Arn
-                - Effect: Allow
-                  Action:
-                    - sqs:ChangeMessageVisibility
-                    - sqs:DeleteMessage
-                    - sqs:GetQueueAttributes
-                    - sqs:ReceiveMessage
-                  Resource: !GetAtt SourcesQueue.Arn
                 - Effect: Allow
                   Action:
                     - dynamodb:GetItem
@@ -177,14 +136,6 @@ resources:
               Statement:
                 - Effect: Allow
                   Action:
-                    - sqs:ChangeMessageVisibility
-                    - sqs:DeleteMessage
-                    - sqs:GetQueueAttributes
-                    - sqs:ReceiveMessage
-                    - sqs:SendMessage
-                  Resource: !GetAtt SourcesQueue.Arn
-                - Effect: Allow
-                  Action:
                     - s3:GetObject*
                   Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}/*'
                 - Effect: Allow
@@ -209,13 +160,6 @@ resources:
             PolicyDocument:
               Version: '2012-10-17'
               Statement:
-                - Effect: Allow
-                  Action:
-                    - sqs:ChangeMessageVisibility
-                    - sqs:DeleteMessage
-                    - sqs:GetQueueAttributes
-                    - sqs:ReceiveMessage
-                  Resource: !GetAtt YoutubeVideosQueue.Arn
                 - Effect: Allow
                   Action:
                     - dynamodb:UpdateItem
@@ -260,6 +204,8 @@ stepFunctions:
   stateMachines:
     youtube_podcasts:
       name: youtube-podcasts
+      events:
+        - schedule: cron(0 4,12 * * ? *)
       definition:
         StartAt: init
         States:
@@ -276,7 +222,25 @@ stepFunctions:
                   Type: Task
                   Resource: !GetAtt parser.Arn
                   End: true
-            End: true
+            Next: merge_results
+          merge_results:
+            Type: Task
+            Resource: !GetAtt merger.Arn
+            Next: audio_uploader
+          audio_uploader:
+            Type: Map
+            Iterator:
+              StartAt: mapped_uploader
+              States:
+                mapped_uploader:
+                  Type: Task
+                  Resource: !GetAtt uploader.Arn
+                  End: true
+            Next: feedgen
+          feedgen:
+            Type: Task
+            Resource: !GetAtt generator.Arn
+            End: True
 
 plugins:
   - serverless-python-requirements
