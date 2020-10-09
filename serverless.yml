@@ -1,0 +1,247 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: youtube-podcasts
+
+provider:
+  name: aws
+  runtime: python3.8
+  region: eu-north-1
+package:
+  individually: true
+  exclude:
+    - node_modules/**
+    - model/**
+    - .vscode/**
+custom:
+  youtube-api-key: ${ssm:/youtube-podcasts/youtube-api-key}
+  youtube-podcasts-s3-bucket: podcasts.awsome.click
+  pythonRequirements:
+    dockerizePip: non-linux
+    usePipenv: false # c'mon, don't enable this again.
+    # don't use slim, it will break things
+    noDeploy:
+      - boto3
+      - botocore
+      - docutils
+      - jmespath
+      - pip
+      - python-dateutil
+      - s3transfer
+      - setuptools
+functions:
+  init:
+    handler: init.lambda_handler
+    module: init
+    memorySize: 128
+    timeout: 300
+    role: YoutubePodcastsLambdaInit
+    environment:
+      S3_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
+  parser:
+    handler: fetch_videos.lambda_handler
+    module: youtube_parser
+    memorySize: 128
+    timeout: 300
+    role: YoutubePodcastsLambdaParser
+    environment:
+      YOUTUBE_API_KEY: ${self:custom.youtube-api-key}
+      S3_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
+  uploader:
+    handler: audio_uploader.lambda_handler
+    module: audio_uploader
+    memorySize: 256
+    timeout: 300
+    layers:
+      - 'Fn::Join':
+          - ':'
+          - - 'arn:aws:lambda'
+            - Ref: 'AWS::Region'
+            - Ref: 'AWS::AccountId'
+            - 'layer:ffmpeg:1'
+    role: YoutubePodcastsLambdaUploader
+    environment:
+      S3_OUTPUT_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
+  generator:
+    handler: podcast_feedgen.lambda_handler
+    module: podcast_feedgen
+    memorySize: 256
+    timeout: 600
+    role: YoutubePodcastsLambdaGenerator
+    environment:
+      S3_BUCKET: ${self:custom.youtube-podcasts-s3-bucket}
+  merger:
+    handler: merge_arrays.lambda_handler
+    module: map_output_merge
+    memorySize: 128
+    timeout: 300
+
+resources:
+  Resources:
+    YoutubePodcastsLambdaParser:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: parser-lambda
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                  Resource: '*'
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject*
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}/*'
+    YoutubePodcastsLambdaInit:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: init-lambda
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject*
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}/*'
+                - Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}'
+    YoutubePodcastsLambdaUploader:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: uploader-lambda
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:UpdateItem
+                  Resource: '*'
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject*
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}/*'
+                - Effect: Allow
+                  Action:
+                    - sns:List*
+                    - sns:Publish
+                  Resource: '*'
+    YoutubePodcastsLambdaGenerator:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: uploader-lambda
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject*
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}/*'
+                - Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                  Resource: 'arn:aws:s3:::${self:custom.youtube-podcasts-s3-bucket}'
+
+stepFunctions:
+  stateMachines:
+    youtube_podcasts:
+      name: youtube-podcasts
+      events:
+        - schedule: cron(0 4,12 * * ? *)
+      definition:
+        StartAt: init
+        States:
+          init:
+            Type: Task
+            Resource: !GetAtt init.Arn
+            Next: parser
+          parser:
+            Type: Map
+            Iterator:
+              StartAt: mappped_parser
+              States:
+                mappped_parser:
+                  Type: Task
+                  Resource: !GetAtt parser.Arn
+                  End: true
+            Next: merge_results
+          merge_results:
+            Type: Task
+            Resource: !GetAtt merger.Arn
+            Next: audio_uploader
+          audio_uploader:
+            Type: Map
+            Iterator:
+              StartAt: mapped_uploader
+              States:
+                mapped_uploader:
+                  Type: Task
+                  Resource: !GetAtt uploader.Arn
+                  End: true
+            Next: feedgen
+          feedgen:
+            Type: Task
+            Resource: !GetAtt generator.Arn
+            End: True
+
+plugins:
+  - serverless-python-requirements
+  - serverless-step-functions

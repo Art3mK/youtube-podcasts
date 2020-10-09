@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
-import os
-import sys
 import json
-import boto3
+import os
 import re
+import boto3
+import urllib.parse
 from feedgen.feed import FeedGenerator
-from datetime import date, datetime, timedelta
 
 def generate_feed(bucket, prefix, events, s3_client):
     fg = FeedGenerator()
@@ -44,8 +43,9 @@ def list_episodes(bucket, prefix, s3_client):
         event['title'] = episode['title']
         event['description'] = episode['description']
         event['id'] = episode['id']
-        event['media'] = f"http://{bucket}/{prefix}{os.path.basename(episode['_filename'])}"
-        event['thumbnail'] = episode['thumbnail']
+        event['media'] = f"https://s3.eu-north-1.amazonaws.com/podcasts.awsome.click/" + urllib.parse.quote_plus(f"{prefix}{os.path.basename(episode['_filename'])}",safe="/")
+        event['thumbnail'] = f"https://img.youtube.com/vi/{event['id']}/sddefault.jpg"
+        print(event)
         episodes.append(event)
     generate_feed(bucket, prefix, episodes, s3_client)
 
@@ -60,6 +60,7 @@ def main():
     paginator = s3.get_paginator("list_objects")
     for page in paginator.paginate(Bucket=S3_BUCKET,Delimiter="/"):
         for prefix in page.get('CommonPrefixes'):
+            print(f"Doing stuff on prefix {prefix.get('Prefix')}")
             list_episodes(S3_BUCKET, prefix.get('Prefix'), s3)
     return 0
 
