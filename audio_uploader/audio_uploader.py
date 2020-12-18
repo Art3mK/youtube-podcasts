@@ -3,10 +3,11 @@ from youtube_dl import DownloadError
 import glob
 import boto3
 import os
-import json
+import traceback
+import logging
 
 ydl_opts = {
-    'format': 'bestaudio[ext=m4a]',
+    'format': 'bestaudio',
     'outtmpl': '/tmp/%(title)s.%(ext)s',
     'writeinfojson': True,
     'cachedir': False
@@ -20,6 +21,9 @@ def download_audio_file(url):
         except DownloadError as down_error:
             print(f"Can't download {url}")
             print(down_error)
+            return 1
+        except Exception as e:
+            logging.error(traceback.format_exc())
             return 1
 
 def upload_to_s3(folder, bucket):
@@ -38,11 +42,22 @@ def upload_to_s3(folder, bucket):
         # lambdas are reused, so clean up /tmp
         os.remove(file)
 
+def clean_ddb(video_id):
+    print(f"I'm gonna remove video id: {video_id} from DDB")
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table('videos')
+    table.delete_item(
+        Key={
+            'video_id': video_id
+        }
+    )
+
+
 if __name__ == "__main__":
-    download_audio_file('https://www.youtube.com/watch?v=hBACz_OP2LU')
+    download_audio_file('https://www.youtube.com/watch?v=Lqe54ihSkUY')
     # download_audio_file('https://www.youtube.com/watch?v=dqwpQarrDwk')
     # download_audio_file('https://www.youtube.com/watch?v=udFxKZRyQt4')
-    upload_to_s3('buff_dudes','podcasts.awsome.click')
+    # upload_to_s3('buff_dudes','podcasts.awsome.click')
 
 def lambda_handler(event, context):
     S3_BUCKET = os.environ.get('S3_OUTPUT_BUCKET')
@@ -57,5 +72,7 @@ def lambda_handler(event, context):
     #     "publishedDate": "2020-08-12T13:35:26Z"
     # }
     print(event)
-    if (download_audio_file(event['videoId']) == 0):
+    if download_audio_file(event['videoId']) == 0:
         upload_to_s3(event['channel_title'], S3_BUCKET)
+    else:
+        clean_ddb(event['videoId'])

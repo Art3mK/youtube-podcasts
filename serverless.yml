@@ -15,6 +15,7 @@ service: youtube-podcasts
 
 provider:
   name: aws
+  versionFunctions: false
   runtime: python3.8
   region: eu-north-1
 package:
@@ -163,6 +164,7 @@ resources:
                 - Effect: Allow
                   Action:
                     - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
                   Resource: '*'
                 - Effect: Allow
                   Action:
