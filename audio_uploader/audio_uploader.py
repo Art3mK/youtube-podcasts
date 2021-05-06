@@ -5,6 +5,7 @@ import boto3
 import os
 import traceback
 import logging
+import json
 
 ydl_opts = {
     'format': 'bestaudio',
@@ -29,18 +30,19 @@ def download_audio_file(url):
 def upload_to_s3(folder, bucket):
     # s3 = boto3.client('s3',endpoint_url='http://localhost:4572',aws_access_key_id="abc",aws_secret_access_key="bce")
     s3 = boto3.client('s3')
-    for file in glob.glob("/tmp/*.m4a"):
-        file_name = os.path.basename(file)
-        print(f"Uploading {folder}/{file_name} to s3://{bucket}")
-        s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL':'public-read', 'ContentType': "audio/m4a", 'StorageClass': 'ONEZONE_IA' })
-        # lambdas are reused, so clean up /tmp
-        os.remove(file)
     for file in glob.glob("/tmp/*.info.json"):
         file_name = os.path.basename(file)
+        info_file = open(file, "r")
+        video_file = json.loads(info_file.read())['_filename']
+        info_file.close()
         print(f"Uploading {folder}/{file_name} to s3://{bucket}")
-        s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL':'public-read', 'ContentType': "text/json"})
+        s3.upload_file(file, bucket, f'{folder}/{file_name}', ExtraArgs={'ACL': 'public-read', 'ContentType': "text/json"})
+        print(f"Uploading {folder}/{os.path.basename(video_file)} to s3://{bucket}")
+        s3.upload_file(video_file, bucket, f'{folder}/{os.path.basename(video_file)}', ExtraArgs={'ACL': 'public-read'})
         # lambdas are reused, so clean up /tmp
         os.remove(file)
+        os.remove(video_file)
+
 
 def clean_ddb(video_id):
     print(f"I'm gonna remove video id: {video_id} from DDB")
